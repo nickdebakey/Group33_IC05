@@ -6,6 +6,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.os.AsyncTask;
@@ -36,6 +37,10 @@ public class MainActivity extends AppCompatActivity {
     ImageView iv_prev;
     ImageView iv_next;
     ImageView iv_mainImage;
+    String keywordResult;
+    String[] keywordResultArray;
+    String imageURLResult;
+    String[] imageURLResultArray;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -65,9 +70,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private class GetKeywords extends AsyncTask<String, Void, String>{
-        String result;
-        String[] resultArray;
-
         @Override
         protected String doInBackground(String... strings) {
             StringBuilder stringBuilder = new StringBuilder();
@@ -86,7 +88,7 @@ public class MainActivity extends AppCompatActivity {
                     stringBuilder.append(line);
                     Log.d("demo", "keywords: " + line.toString());
                 }
-                result = stringBuilder.toString().trim();
+                keywordResult = stringBuilder.toString().trim();
             } catch (MalformedURLException e) {
                 e.printStackTrace();
             } catch (IOException e) {
@@ -103,19 +105,19 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
             }
-            return result;
+            return keywordResult;
         }
 
         @Override
         protected void onPostExecute(String s) {
-            resultArray = s.split(";");
+            keywordResultArray = s.split(";");
             AlertDialog.Builder keywordDialog = new AlertDialog.Builder(MainActivity.this);
             keywordDialog.setTitle("Choose a Keyword");
-            keywordDialog.setItems(resultArray, new DialogInterface.OnClickListener() {
+            keywordDialog.setItems(keywordResultArray, new DialogInterface.OnClickListener() {
                 @Override
                 public void onClick(DialogInterface dialogInterface, int i) {
-                    tv_keyword.setText(resultArray[i]);
-                    // GetImageURL(resultArray[i]).execute("http://dev.theappsdr.com/apis/photos/index.php");
+                    tv_keyword.setText(keywordResultArray[i]);
+                    new GetImageURL().execute("http://dev.theappsdr.com/apis/photos/index.php" + "?keyword=" + keywordResultArray[i]);
                 }
             });
             AlertDialog dialog = keywordDialog.create();
@@ -124,20 +126,85 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private class GetImageURL extends AsyncTask<String, Void, String> {
-
-
         @Override
         protected String doInBackground(String... strings) {
             // get the image URL here
-            return null;
+            StringBuilder stringBuilder = new StringBuilder();
+            HttpURLConnection connection = null;
+            InputStream inputStream = null;
+            try {
+                URL keywordURL = new URL(strings[0]);
+                connection = (HttpURLConnection) keywordURL.openConnection();
+                inputStream = connection.getInputStream();
+                connection.connect();
+                BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
+                String line = "";
+
+                // while loop for splitting line
+                while((line = reader.readLine()) != null){
+                    stringBuilder.append(line);
+                    Log.d("demo", "urls for images: " + line.toString());
+                }
+                imageURLResult = stringBuilder.toString().trim();
+            } catch (MalformedURLException e) {
+                e.printStackTrace();
+            } catch (IOException e) {
+                e.printStackTrace();
+            } finally {
+                if(connection != null) {
+                    connection.disconnect();
+                }
+                if(inputStream != null) {
+                    try {
+                        inputStream.close();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+            return imageURLResult;
         }
 
         @Override
         protected void onPostExecute(String s) {
-            // return the image URL ?
+            // rework so that the image urls on the webpage get stored in an array, current code not working
+            imageURLResultArray = s.split("\\s+");
         }
     }
-    
+
+    private class DisplayImages extends AsyncTask<String, Void, Void> {
+        Bitmap bitmap = null;
+
+        @Override
+        protected Void doInBackground(String... strings) {
+            HttpURLConnection connection = null;
+            try {
+                URL url = new URL(strings[0]);
+                connection = (HttpURLConnection) url.openConnection();
+                connection.connect();
+                if (connection.getResponseCode() == HttpURLConnection.HTTP_OK) {
+                    bitmap = BitmapFactory.decodeStream(connection.getInputStream());
+                }
+            } catch (MalformedURLException e) {
+                e.printStackTrace();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }finally {
+                if(connection != null) {
+                    connection.disconnect();
+                }
+            }
+            return null;
+        }
+
+        @Override
+        protected void onPostExecute(Void aVoid) {
+            // just testing the first image
+            iv_mainImage.setImageBitmap(bitmap);
+
+            // refractor for the prev + next buttons on click to display circular queue of images in array
+        }
+    }
 
     private boolean isConnected() {
         ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
